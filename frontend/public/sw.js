@@ -1,4 +1,4 @@
-const CACHE_NAME = 'bkn-running-v1';
+const CACHE_NAME = 'bkn-running-v3';
 const STATIC_ASSETS = ['/', '/login', '/dashboard', '/manifest.json', '/logo.png'];
 
 self.addEventListener('install', (event) => {
@@ -21,6 +21,10 @@ self.addEventListener('fetch', (event) => {
   // Hanya cache GET request, skip API calls
   if (event.request.method !== 'GET') return;
   if (event.request.url.includes('/api/')) return;
+
+  // Skip non-http(s) requests (chrome-extension://, etc.)
+  const url = new URL(event.request.url);
+  if (url.protocol !== 'http:' && url.protocol !== 'https:') return;
 
   event.respondWith(
     fetch(event.request)
