@@ -21,12 +21,11 @@ export default function ChinningPage() {
   const poseRef = useRef(null);
   const cameraRef = useRef(null);
 
-  // Chinning = pull up dengan telapak tangan menghadap ke dalam (underhand grip)
-  // Deteksi sama dengan pull up: naik (siku < 120) lalu turun (siku > 155)
   const stateRef = useRef('idle');
   const countRef = useRef(0);
   const startedRef = useRef(false);
   const minAngleRef = useRef(180);
+  const lastRepTimeRef = useRef(0);
 
   const [count, setCount] = useState(0);
   const [feedback, setFeedback] = useState('Siap - Tekan Mulai');
@@ -123,7 +122,17 @@ export default function ChinningPage() {
 
     if (!startedRef.current) return;
 
-    if (stateRef.current === 'idle' || stateRef.current === 'down') {
+    if (stateRef.current === 'idle') {
+      // Harus capai posisi gantung penuh dulu sebelum bisa mulai hitung
+      if (angle > 155) {
+        stateRef.current = 'down';
+        setFeedback('Siap! Angkat badan (siku < 120\u00b0)');
+        setFeedbackColor('text-yellow-400');
+      } else {
+        setFeedback('Luruskan lengan penuh dulu (> 155\u00b0)');
+        setFeedbackColor('text-white/60');
+      }
+    } else if (stateRef.current === 'down') {
       if (angle < 120) {
         stateRef.current = 'up';
         minAngleRef.current = angle;
@@ -136,11 +145,15 @@ export default function ChinningPage() {
     } else if (stateRef.current === 'up') {
       if (angle < minAngleRef.current) minAngleRef.current = angle;
       if (angle > 155) {
-        stateRef.current = 'down';
-        countRef.current += 1;
-        setCount(countRef.current);
-        setFeedback('Rep ' + countRef.current + ' \u2713 Lanjutkan!');
-        setFeedbackColor('text-purple-400');
+        const now = Date.now();
+        if (now - lastRepTimeRef.current > 800) {
+          stateRef.current = 'down';
+          countRef.current += 1;
+          lastRepTimeRef.current = now;
+          setCount(countRef.current);
+          setFeedback('Rep ' + countRef.current + ' \u2713 Lanjutkan!');
+          setFeedbackColor('text-purple-400');
+        }
       } else {
         setFeedback('Turun penuh, luruskan lengan');
         setFeedbackColor('text-orange-400');
@@ -209,11 +222,12 @@ export default function ChinningPage() {
     stateRef.current = 'idle';
     countRef.current = 0;
     minAngleRef.current = 180;
+    lastRepTimeRef.current = 0;
     setCount(0);
     startedRef.current = true;
     setStarted(true);
-    setFeedback('Angkat badan (siku < 120\u00b0)');
-    setFeedbackColor('text-yellow-400');
+    setFeedback('Luruskan lengan penuh dulu (> 155\u00b0)');
+    setFeedbackColor('text-white/60');
   };
 
   const handleStop = () => {

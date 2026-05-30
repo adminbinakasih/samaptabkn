@@ -21,11 +21,11 @@ export default function PullUpPage() {
   const poseRef = useRef(null);
   const cameraRef = useRef(null);
 
-  // State machine: idle -> up (siku < 120) -> down (siku > 155) -> hitung rep
   const stateRef = useRef('idle');
   const countRef = useRef(0);
-  const startedRef = useRef(false); // pakai ref agar tidak kena closure bug
-  const minAngleRef = useRef(180); // sudut terkecil saat posisi naik
+  const startedRef = useRef(false);
+  const minAngleRef = useRef(180);
+  const lastRepTimeRef = useRef(0);
 
   const [count, setCount] = useState(0);
   const [feedback, setFeedback] = useState('Siap - Tekan Mulai');
@@ -129,11 +129,20 @@ export default function PullUpPage() {
 
     // ── LOGIKA DETEKSI PULL UP ──
     // Pull up dari depan: tangan di atas kepala memegang bar
-    // Posisi NAIK: siku menekuk < 120° (dagu melewati bar)
-    // Posisi TURUN: lengan lurus > 155° (gantung penuh)
-    // Rep dihitung: naik dulu (< 120) LALU turun (> 155)
+    // Urutan WAJIB: idle → tunggu posisi gantung (> 155°) → naik (< 120°) → turun (> 155°) → rep +1
+    // Rep TIDAK dihitung jika belum pernah mencapai posisi gantung penuh terlebih dahulu
 
-    if (stateRef.current === 'idle' || stateRef.current === 'down') {
+    if (stateRef.current === 'idle') {
+      // Harus capai posisi gantung penuh dulu sebelum bisa mulai hitung
+      if (angle > 155) {
+        stateRef.current = 'down';
+        setFeedback('Siap! Angkat badan (siku < 120\u00b0)');
+        setFeedbackColor('text-yellow-400');
+      } else {
+        setFeedback('Luruskan lengan penuh dulu (> 155\u00b0)');
+        setFeedbackColor('text-white/60');
+      }
+    } else if (stateRef.current === 'down') {
       if (angle < 120) {
         stateRef.current = 'up';
         minAngleRef.current = angle;
@@ -146,11 +155,15 @@ export default function PullUpPage() {
     } else if (stateRef.current === 'up') {
       if (angle < minAngleRef.current) minAngleRef.current = angle;
       if (angle > 155) {
-        stateRef.current = 'down';
-        countRef.current += 1;
-        setCount(countRef.current);
-        setFeedback('Rep ' + countRef.current + ' \u2713 Lanjutkan!');
-        setFeedbackColor('text-blue-400');
+        const now = Date.now();
+        if (now - lastRepTimeRef.current > 800) {
+          stateRef.current = 'down';
+          countRef.current += 1;
+          lastRepTimeRef.current = now;
+          setCount(countRef.current);
+          setFeedback('Rep ' + countRef.current + ' \u2713 Lanjutkan!');
+          setFeedbackColor('text-blue-400');
+        }
       } else {
         setFeedback('Turun penuh, luruskan lengan');
         setFeedbackColor('text-orange-400');
@@ -219,11 +232,12 @@ export default function PullUpPage() {
     stateRef.current = 'idle';
     countRef.current = 0;
     minAngleRef.current = 180;
+    lastRepTimeRef.current = 0;
     setCount(0);
     startedRef.current = true;
     setStarted(true);
-    setFeedback('Angkat badan (siku < 120\u00b0)');
-    setFeedbackColor('text-yellow-400');
+    setFeedback('Luruskan lengan penuh dulu (> 155\u00b0)');
+    setFeedbackColor('text-white/60');
   };
 
   const handleStop = () => {

@@ -29,7 +29,8 @@ export default function SitUpPage() {
   const stateRef = useRef('idle');
   const countRef = useRef(0);
   const startedRef = useRef(false);
-  const minAngleRef = useRef(180); // sudut terkecil saat naik
+  const minAngleRef = useRef(180);
+  const lastRepTimeRef = useRef(0); // debounce: cegah rep ganda
 
   const [count, setCount] = useState(0);
   const [feedback, setFeedback] = useState('Siap - Tekan Mulai');
@@ -128,11 +129,21 @@ export default function SitUpPage() {
     if (!startedRef.current) return;
 
     // Logika sit up:
-    // Mulai dari posisi bawah (berbaring, sudut > 145)
-    // Naik ke posisi duduk (sudut < 100) — dilonggarkan agar lebih realistis
+    // Wajib mulai dari posisi berbaring (sudut > 145) dulu
+    // Baru bisa naik ke posisi duduk (sudut < 100)
     // Rep dihitung saat kembali ke bawah (> 145)
 
-    if (stateRef.current === 'idle' || stateRef.current === 'down') {
+    if (stateRef.current === 'idle') {
+      // Harus capai posisi berbaring dulu sebelum bisa mulai hitung
+      if (angle > 145) {
+        stateRef.current = 'down';
+        setFeedback('Siap! Angkat badan (sudut pinggul < 100\u00b0)');
+        setFeedbackColor('text-yellow-400');
+      } else {
+        setFeedback('Berbaring dulu, luruskan tubuh (> 145\u00b0)');
+        setFeedbackColor('text-white/60');
+      }
+    } else if (stateRef.current === 'down') {
       if (angle < 100) {
         stateRef.current = 'up';
         minAngleRef.current = angle;
@@ -145,11 +156,16 @@ export default function SitUpPage() {
     } else if (stateRef.current === 'up') {
       if (angle < minAngleRef.current) minAngleRef.current = angle;
       if (angle > 145) {
-        stateRef.current = 'down';
-        countRef.current += 1;
-        setCount(countRef.current);
-        setFeedback('Rep ' + countRef.current + ' \u2713 Lanjutkan!');
-        setFeedbackColor('text-amber-400');
+        // Debounce: minimal 800ms antar rep untuk cegah hitungan ganda
+        const now = Date.now();
+        if (now - lastRepTimeRef.current > 800) {
+          stateRef.current = 'down';
+          countRef.current += 1;
+          lastRepTimeRef.current = now;
+          setCount(countRef.current);
+          setFeedback('Rep ' + countRef.current + ' \u2713 Lanjutkan!');
+          setFeedbackColor('text-amber-400');
+        }
       } else {
         setFeedback('Turun ke posisi berbaring');
         setFeedbackColor('text-orange-400');
@@ -218,11 +234,12 @@ export default function SitUpPage() {
     stateRef.current = 'idle';
     countRef.current = 0;
     minAngleRef.current = 180;
+    lastRepTimeRef.current = 0;
     setCount(0);
     startedRef.current = true;
     setStarted(true);
-    setFeedback('Angkat badan (sudut pinggul < 100\u00b0)');
-    setFeedbackColor('text-yellow-400');
+    setFeedback('Berbaring dulu, luruskan tubuh (> 145\u00b0)');
+    setFeedbackColor('text-white/60');
   };
 
   const handleStop = () => {

@@ -21,12 +21,17 @@ export default function PushUpPage() {
   const poseRef = useRef(null);
   const cameraRef = useRef(null);
 
-  // State machine: 'idle' -> 'down' (siku < 100) -> 'up' (siku > 155) -> hitung rep
-  // Threshold ketat: harus benar-benar turun dalam (< 100) DAN naik penuh (> 155)
   const stateRef = useRef('idle');
   const countRef = useRef(0);
   const startedRef = useRef(false);
-  const minAngleRef = useRef(180); // sudut terkecil yang dicapai dalam satu gerakan turun
+  const minAngleRef = useRef(180);
+  const lastRepTimeRef = useRef(0); // debounce: cegah rep ganda
+
+  // Video recording
+  const mediaRecorderRef = useRef(null);
+  const recordedChunksRef = useRef([]);
+  const [isRecording, setIsRecording] = useState(false);
+  const [videoBlob, setVideoBlob] = useState(null);
 
   const [count, setCount] = useState(0);
   const [feedback, setFeedback] = useState('Siap - Tekan Mulai');
@@ -129,12 +134,22 @@ export default function PushUpPage() {
 
     // ── LOGIKA DETEKSI ──
     // Gerakan dihitung HANYA jika:
-    // 1. Siku turun sampai < 100° (posisi bawah push up yang benar)
-    // 2. Kemudian siku naik kembali ke > 155° (lengan hampir lurus penuh)
+    // 1. Wajib mulai dari posisi atas (lengan lurus > 155°) dulu
+    // 2. Siku turun sampai < 100° (posisi bawah push up yang benar)
+    // 3. Kemudian siku naik kembali ke > 155° (lengan hampir lurus penuh)
     // Gap 55° antara threshold bawah dan atas mencegah hitungan palsu
 
-    if (stateRef.current === 'idle' || stateRef.current === 'up') {
-      // Menunggu gerakan turun
+    if (stateRef.current === 'idle') {
+      // Harus capai posisi atas (lengan lurus) dulu sebelum bisa mulai hitung
+      if (angle > 155) {
+        stateRef.current = 'up';
+        setFeedback('Siap! Turunkan badan sampai siku < 100\u00b0');
+        setFeedbackColor('text-yellow-400');
+      } else {
+        setFeedback('Luruskan lengan penuh dulu (> 155\u00b0)');
+        setFeedbackColor('text-white/60');
+      }
+    } else if (stateRef.current === 'up') {
       if (angle < 100) {
         stateRef.current = 'down';
         minAngleRef.current = angle;
@@ -145,16 +160,19 @@ export default function PushUpPage() {
         setFeedbackColor('text-yellow-400');
       }
     } else if (stateRef.current === 'down') {
-      // Sudah di bawah, track sudut terkecil
       if (angle < minAngleRef.current) minAngleRef.current = angle;
 
       if (angle > 155) {
-        // Gerakan lengkap: turun (< 100) lalu naik (> 155)
-        stateRef.current = 'up';
-        countRef.current += 1;
-        setCount(countRef.current);
-        setFeedback('Rep ' + countRef.current + ' \u2713 Lanjutkan!');
-        setFeedbackColor('text-orange-400');
+        // Debounce: minimal 800ms antar rep untuk cegah hitungan ganda
+        const now = Date.now();
+        if (now - lastRepTimeRef.current > 800) {
+          stateRef.current = 'up';
+          countRef.current += 1;
+          lastRepTimeRef.current = now;
+          setCount(countRef.current);
+          setFeedback('Rep ' + countRef.current + ' \u2713 Lanjutkan!');
+          setFeedbackColor('text-orange-400');
+        }
       } else {
         setFeedback('Naik! Luruskan lengan penuh');
         setFeedbackColor('text-blue-400');
@@ -228,17 +246,62 @@ export default function PushUpPage() {
     stateRef.current = 'idle';
     countRef.current = 0;
     minAngleRef.current = 180;
+    lastRepTimeRef.current = 0;
     setCount(0);
     startedRef.current = true;
     setStarted(true);
-    setFeedback('Turunkan badan sampai siku < 100\u00b0');
-    setFeedbackColor('text-yellow-400');
+    setVideoBlob(null);
+    setFeedback('Luruskan lengan penuh dulu (> 155\u00b0)');
+    setFeedbackColor('text-white/60');
+
+    // Mulai rekam video dari canvas
+    try {
+      const canvas = canvasRef.current;
+      if (canvas && canvas.captureStream) {
+        const stream = canvas.captureStream(30);
+        const mimeType = MediaRecorder.isTypeSupported('video/webm;codecs=vp9')
+          ? 'video/webm;codecs=vp9'
+          : MediaRecorder.isTypeSupported('video/webm')
+          ? 'video/webm'
+          : 'video/mp4';
+        const recorder = new MediaRecorder(stream, { mimeType });
+        recordedChunksRef.current = [];
+        recorder.ondataavailable = (e) => {
+          if (e.data && e.data.size > 0) recordedChunksRef.current.push(e.data);
+        };
+        recorder.onstop = () => {
+          const blob = new Blob(recordedChunksRef.current, { type: mimeType });
+          setVideoBlob(blob);
+        };
+        recorder.start(100);
+        mediaRecorderRef.current = recorder;
+        setIsRecording(true);
+      }
+    } catch (e) {
+      // Recording not supported, silently ignore
+    }
   };
 
   const handleStop = () => {
     startedRef.current = false;
     setStarted(false);
     setDone(true);
+    // Stop recording
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+      mediaRecorderRef.current.stop();
+      setIsRecording(false);
+    }
+  };
+
+  const handleDownloadVideo = () => {
+    if (!videoBlob) return;
+    const ext = videoBlob.type.includes('mp4') ? 'mp4' : 'webm';
+    const url = URL.createObjectURL(videoBlob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'pushup-' + new Date().toISOString().slice(0,19).replace(/:/g,'-') + '.' + ext;
+    a.click();
+    URL.revokeObjectURL(url);
   };
 
   const handleSave = async () => {
@@ -293,6 +356,13 @@ export default function PushUpPage() {
             >
               {facingMode === 'environment' ? 'Depan' : 'Belakang'}
             </button>
+            {/* Recording indicator */}
+            {isRecording && (
+              <div className="absolute top-3 left-3 z-10 flex items-center gap-1.5 bg-black/60 px-2 py-1 rounded-lg">
+                <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
+                <span className="text-red-400 text-xs font-semibold">REC</span>
+              </div>
+            )}
             {loading && (
               <div className="absolute inset-0 flex items-center justify-center bg-black/80">
                 <div className="text-center">
@@ -351,6 +421,12 @@ export default function PushUpPage() {
                 style={{ background: 'linear-gradient(135deg,#f97316,#f59e0b)', boxShadow: '0 8px 32px rgba(249,115,22,0.3)' }}>
                 {saving ? 'Menyimpan...' : 'Simpan Aktivitas'}
               </button>
+              {videoBlob && (
+                <button onClick={handleDownloadVideo}
+                  className="py-3 rounded-2xl font-semibold text-white border border-blue-500/30 bg-blue-500/10 hover:bg-blue-500/20 transition-all text-sm">
+                  Download Video Latihan
+                </button>
+              )}
               <button onClick={() => { setDone(false); setCount(0); countRef.current = 0; startedRef.current = false; stateRef.current = 'idle'; setFeedback('Siap - Tekan Mulai'); }}
                 className="py-3 rounded-2xl text-white/40 border border-white/5 text-sm">
                 Ulangi
