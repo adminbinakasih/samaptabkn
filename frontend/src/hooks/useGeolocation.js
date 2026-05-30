@@ -10,8 +10,8 @@ export function useGeolocation(options = {}) {
 
   const defaultOptions = {
     enableHighAccuracy: true,
-    timeout: 10000,
-    maximumAge: 0,
+    timeout: 30000,      // 30 detik — cukup waktu untuk GPS lock pertama
+    maximumAge: 5000,    // boleh pakai cache posisi sampai 5 detik
     ...options,
   };
 
@@ -28,6 +28,8 @@ export function useGeolocation(options = {}) {
 
     watchIdRef.current = navigator.geolocation.watchPosition(
       (pos) => {
+        // Selalu update posisi untuk tampilan peta (termasuk akurasi rendah)
+        // Filter ketat hanya dilakukan di level rekam rute (running page)
         setPosition({
           latitude: pos.coords.latitude,
           longitude: pos.coords.longitude,

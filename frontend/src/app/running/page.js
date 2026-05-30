@@ -30,11 +30,19 @@ function RunningPageContent() {
     error: gpsError,
     startTracking,
     stopTracking,
+    getCurrentPosition,
   } = useGeolocation({
     enableHighAccuracy: true,
     timeout: 10000,
     maximumAge: 0,
   });
+
+  // Auto-detect lokasi saat halaman dibuka
+  useEffect(() => {
+    getCurrentPosition().catch(() => {
+      // Ignore error, user will see GPS error message
+    });
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const {
     routePoints,
@@ -48,6 +56,10 @@ function RunningPageContent() {
 
   useEffect(() => {
     if (isRunning && !isPaused && currentPosition) {
+      // Hanya rekam titik dengan akurasi <= 50 meter untuk rute
+      // (lebih longgar dari sebelumnya agar tidak terlalu sering skip)
+      if (currentPosition.accuracy && currentPosition.accuracy > 50) return;
+
       addPoint({
         latitude: currentPosition.latitude,
         longitude: currentPosition.longitude,
