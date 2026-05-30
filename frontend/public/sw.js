@@ -1,4 +1,4 @@
-const CACHE_NAME = 'bkn-running-v3';
+const CACHE_NAME = 'bkn-running-v4';
 const STATIC_ASSETS = ['/', '/login', '/dashboard', '/manifest.json', '/logo.png'];
 
 self.addEventListener('install', (event) => {
