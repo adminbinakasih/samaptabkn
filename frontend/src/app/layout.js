@@ -7,11 +7,6 @@ export const metadata = {
   description: 'Platform Kesamaptaan Digital Sekolah',
   manifest: '/manifest.json',
   themeColor: '#f97316',
-  appleWebApp: {
-    capable: true,
-    statusBarStyle: 'black-translucent',
-    title: 'BKN-Running',
-  },
   icons: {
     icon: '/logo.png',
     apple: '/logo.png',
@@ -29,6 +24,7 @@ export default function RootLayout({ children }) {
       <head>
         <link rel="manifest" href="/manifest.json" />
         <meta name="theme-color" content="#f97316" />
+        <meta name="mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
         <meta name="apple-mobile-web-app-title" content="BKN-Running" />
